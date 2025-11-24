@@ -3,7 +3,7 @@ import { client } from "./services.gen";
 
 
 // export const API_BASE_URL = 'http://localhost:80';
-export const API_BASE_URL = 'https://www.chimeracoffee.top';
+export const API_BASE_URL = 'https://www.chimeracoffee.top:8448';
 
 export const LOCAL_AUTH_NAME="auth";
 const config = createConfig({
