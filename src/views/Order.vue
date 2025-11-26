@@ -427,8 +427,8 @@ const printOrderDetails = (
   // 打印
   // hiprintTemplate.print2(printData, {printer: 'XP-80C (副本 1)'});
   // hiprintTemplate.print2(printData, {printer: 'Microsoft Print to PDF'});
-  // hiprintTemplate.print2(printData, {printer: 'XP-80C'});
-  hiprintTemplate.print(printData);
+  hiprintTemplate.print2(printData, {printer: 'XP-80C'});
+  // hiprintTemplate.print(printData);
 };
 
 const printOrderTag = (tagInfo: any[], orderId: string, order_time: string) => {
