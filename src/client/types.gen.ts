@@ -178,6 +178,10 @@ export type OptionValue = {
      * 该可选项的价格调整，>=0。单位也为分。
      */
     priceAdjustment?: number;
+    /**
+     * 该产品需要额外花费的原料列表
+     */
+    inventoryList?: Array<InventoryUsage>;
 };
 
 export type Product = {
@@ -230,6 +234,10 @@ export type Product = {
      * 库存数量，为0时前端提示已售罄并不可下单
      */
     stock?: number;
+    /**
+     * 各原料需求列表
+     */
+    inventoryList?: Array<InventoryUsage>;
     /**
      * 预售买数量，补货后清零
      */
@@ -408,6 +416,11 @@ export type Inventory = {
     deleted?: boolean;
     unit?: string;
     remain?: number;
+};
+
+export type InventoryUsage = {
+    uuid: string;
+    amount: number;
 };
 
 export type Activity = {

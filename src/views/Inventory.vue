@@ -126,7 +126,6 @@ const openCreateDialog = () => {
     remain: 0,
     // 确保 'deleted' 字段存在并为 false
     deleted: false,
-    id: '' // 确保 id 字段存在，具体视您的 Inventory 类型定义而定
   };
   isEditDialogVisible.value = true;
 };

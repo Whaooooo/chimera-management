@@ -3,13 +3,14 @@ import { ref, onMounted, computed, onBeforeUnmount } from 'vue';
 import {
   getAllOrders,
   getAllProductsShop,
+  getAllInventories,
   createOrderInStore,
   getAllProductOptions,
   supplyOrder,
   refundApply,
   batchSupplyOrders
 } from '../client/services.gen';
-import type { Order, Product, OptionValue, ProductOption, OrderApiParams, UserDTO, DeliveryInfo } from '../client/types.gen';
+import type { Order, Product, Inventory, OptionValue, ProductOption, OrderApiParams, UserDTO, DeliveryInfo } from '../client/types.gen';
 import {
   ElMessage,
   ElTable,
@@ -49,13 +50,16 @@ const productOptions = ref<Map<string, ProductOption>>(new Map());
 
 // 分页相关的变量
 const currentPage = ref(1); // 当前页码
-const pageSize = ref(10); // 每页展示的订单数量
+const pageSize = ref(15); // 每页展示的订单数量
 
 // Details dialog visibility and data
 const orderDetailsDialogVisible = ref(false);
 const selectedOrder = ref<Order | null>(null);
 
 const selectedOrders = ref<Order[]>([]);
+
+// 展示原料用量
+const inventories = ref<Inventory[]>([]);
 
 const selectAllOrders = () => {
   selectedOrders.value = paginatedOrders.value.slice(); // Select all visible orders
@@ -91,6 +95,72 @@ const BatchSupplyOrders = async () => {
     console.error('批量供餐时出错:', error);
     ElMessage.error('批量供餐时出错' + error);
   }
+};
+
+const BatchCalcIngridientUsage = async () => {
+  console.log("已选订单：", selectedOrders);
+
+  const [invResponse, optResponse] = await Promise.all([
+    getAllInventories(),
+    getAllProductOptions()
+  ]);
+
+  inventories.value = invResponse.data;
+  const allOptionGroups = optResponse.data;
+
+  const optionValueMap = new Map<string, any>();
+  
+  if (allOptionGroups) {
+    allOptionGroups.forEach(group => {
+      if (group.values) {
+        group.values.forEach(val => {
+          if (val.uuid) {
+            optionValueMap.set(val.uuid, val);
+          }
+        });
+      }
+    });
+  }
+
+  //这里偷懒一下，用 remain 表示用量了
+  inventories.value.forEach(inv => {
+    inv.remain = 0;
+  });
+
+  const inventoryMap = new Map(inventories.value.map(inv => [inv.id, inv]));
+
+  selectedOrders.value.forEach(order => {
+    order.items?.forEach(item => {
+      const product = productOptionsList.value.find(p => p.id === item.productId);
+      if (product && product.inventoryList) {
+        product.inventoryList.forEach(inventory => {
+          const inventoryItem = inventoryMap.get(inventory.uuid);
+          if (inventoryItem) {
+            inventoryItem.remain += inventory.amount; 
+          }
+        });
+      }
+
+      if (item.optionValues) {
+        for (const [key, snapshotValue] of Object.entries(item.optionValues)) {
+          
+          const realValue = optionValueMap.get(snapshotValue.uuid);
+          const targetValue = realValue || snapshotValue;
+
+          if (targetValue && targetValue.inventoryList) {
+            targetValue.inventoryList.forEach((inventory: any) => {
+              const inventoryItem = inventoryMap.get(inventory.uuid);
+              if (inventoryItem) {
+                inventoryItem.remain += inventory.amount;
+              }
+            });
+          }
+        }
+      }
+    });
+  });
+
+  console.log("计算后的原料用量（remain代表消耗量）：", inventories.value);
 };
 
 
@@ -1710,6 +1780,14 @@ const processXlsxImport = async () => {
       </div>
     </el-form>
 
+    <h3 v-if="inventories.length !== 0">统计</h3>
+
+    <div v-if="inventories.length !== 0" class="form-row">
+      <div v-for="item in inventories" :key="item.uuid">
+        {{ item.name }}: {{ Number(item.remain).toFixed(2) }} {{ item.unit }}
+      </div>
+    </div>
+
     <h1>订单列表</h1>
 
     <div style="margin-bottom: 10px;">
@@ -1717,6 +1795,7 @@ const processXlsxImport = async () => {
       <el-button @click="deselectAllOrders" size="small" style="margin-left: 10px;">取消全选</el-button> -->
       <el-button @click="batchPrintOrders" size="small" type="success" :disabled="selectedOrders.length === 0">批量打印</el-button>
       <el-button @click="BatchSupplyOrders" size="small" type="primary" :disabled="selectedOrders.length === 0">批量供餐</el-button>
+      <el-button @click="BatchCalcIngridientUsage" size="small" type="danger" :disabled="selectedOrders.length === 0">批量计算原料使用</el-button>
       <el-button @click="openBatchImportDialog" size="small" type="warning" style="margin-left: 10px;">批量导入订单</el-button>
     </div>
     
