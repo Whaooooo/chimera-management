@@ -428,7 +428,7 @@ const printOrderDetails = (
   // hiprintTemplate.print2(printData, {printer: 'XP-80C (副本 1)'});
   // hiprintTemplate.print2(printData, {printer: 'Microsoft Print to PDF'});
   // hiprintTemplate.print2(printData, {printer: 'XP-80C'});
-  hiprintTemplate.print(printData);
+  hiprintTemplate.print2(printData, {printer: "Xprinter XP-236B"});
 };
 
 const printOrderTag = (tagInfo: any[], orderId: string, order_time: string) => {
@@ -608,6 +608,10 @@ const printOrder = (order: Order) => {
 
 };
 
+// 自动打印开关状态
+const autoPrintDineInEnabled = ref(true);
+const autoPrintTakeOutEnabled = ref(true);
+const autoPrintFixDeliverEnabled = ref(false);
 
 const connectWebSocket = () => {
   const auth=localStorage.getItem(LOCAL_AUTH_NAME)
@@ -642,6 +646,15 @@ const connectWebSocket = () => {
         confirmButtonText: '确定',
         type: 'success',
       });
+      if (autoPrintDineInEnabled.value && order.scene == "堂食") {
+        printOrder(order);
+      }
+      if (autoPrintTakeOutEnabled.value && order.scene == "外带") {
+        printOrder(order);
+      }
+      if (autoPrintFixDeliverEnabled.value && order.scene == "定时达") {
+        printOrder(order);
+      }
     }else if(state=="已退款"){
       await fetchOrders(); // 刷新订单列表
       ElMessageBox.alert(
@@ -1678,6 +1691,10 @@ const processXlsxImport = async () => {
         </el-form-item>
       </div>
     </el-form>
+
+    <el-checkbox v-model="autoPrintDineInEnabled">自动打印堂食</el-checkbox>
+    <el-checkbox v-model="autoPrintTakeOutEnabled">自动打印外带</el-checkbox>
+    <el-checkbox v-model="autoPrintFixDeliverEnabled">自动打印定时达</el-checkbox>
 
     <h1>订单列表</h1>
 
