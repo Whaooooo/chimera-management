@@ -1,9 +1,10 @@
 import { createConfig } from "@hey-api/client-fetch";
 import { client } from "./services.gen";
 
-
-// export const API_BASE_URL = 'http://localhost:80';
-export const API_BASE_URL = 'https://www.chimeracoffee.top:8448';
+// API Base URL - uses environment variable with fallback
+// In development: uses VITE_API_BASE_URL from .env.development or .env.local
+// In production: uses VITE_API_BASE_URL from .env.production
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8088';
 
 export const LOCAL_AUTH_NAME="auth";
 const config = createConfig({

@@ -7,9 +7,10 @@ import {
   getAllProductOptions,
   updateProduct,
   createProduct,
-  replenishProduct
+  replenishProduct,
+  getAllInventories
 } from '../client/services.gen';
-import type { Product, ProductOption, OptionValue, Order, ProductCate } from '../client/types.gen';
+import type { Product, ProductOption, OptionValue, Order, ProductCate, Inventory } from '../client/types.gen';
 import {
   ElMessage,
   ElTable,
@@ -26,6 +27,8 @@ import {
   ElRadioGroup,
   ElRadio
 } from 'element-plus';
+
+import '../assets/web.css'
 
 const products = ref<Product[]>([]);
 const productCategories = ref<Map<string, string>>(new Map());
@@ -49,6 +52,10 @@ const newOptionId = ref('');
 
 const replenishProductTo = ref<Product | null>(null);
 const replenishQuantity = ref<number>(0);
+
+const inventories = ref<Inventory[]>([]);
+const newInventoryId = ref<string>('');
+const newInventoryQuantity = ref<number>(0);
 
 const availableOptions = computed(() => {
   const selectedOptionIds = Object.keys(editableProduct.value?.productOptions || {});
@@ -151,7 +158,8 @@ const openEditDialog = (product: Product) => {
   editableProduct.value = {
     ...product,
     cateId: productCategories.value.get(product.cateId!.toString()) || '',
-    productOptions: { ...product.productOptions }
+    productOptions: { ...product.productOptions },
+    inventoryList: product.inventoryList ? product.inventoryList.map(item => ({ ...item })) : []
   };
   selectedOptionValues.value = {};
   if (product.productOptions) {
@@ -161,6 +169,8 @@ const openEditDialog = (product: Product) => {
   }
   imageFile.value = null;
   imagePreview.value = product.imgURL || null;
+  newInventoryId.value = '';
+  newInventoryQuantity.value = 0;
   isCreating.value = false;
   isEditDialogVisible.value = true;
 };
@@ -200,16 +210,15 @@ const saveProductChanges = async () => {
 
     console.log('editableProduct', editableProduct.value);
 
-    // Before sending data to backend, convert prices from yuan to fen
     const productToSend = {
       ...editableProduct.value,
       price: Math.round(editableProduct.value.price * 100),
       stock: editableProduct.value.stock || 0,
       presaleNum: editableProduct.value.presaleNum || 0,
-      stocked: editableProduct.value.stocked || false
+      stocked: editableProduct.value.stocked || false,
+      inventoryList: editableProduct.value.inventoryList || []
     };
 
-    // Adjust OptionValue.priceAdjustment
     if (productToSend.productOptions) {
       const adjustedProductOptions = {};
       for (const [optionId, values] of Object.entries(productToSend.productOptions)) {
@@ -227,6 +236,7 @@ const saveProductChanges = async () => {
       });
       ElMessage.success('Product created successfully');
     } else {
+      console.log('productToSend', productToSend);  
       await updateProduct({
         body: productToSend,
         method: 'PUT',
@@ -360,6 +370,7 @@ onMounted(async () => {
     await fetchProducts();
     await fetchProductCategories();
     await fetchProductOptions();
+    await fetchInventories();
   } catch (error) {
     console.error('Error fetching products:', error);
   }
@@ -383,6 +394,61 @@ const getProductOptionDisplay = (optionId: string, values: OptionValue[]) => {
     return `${option.name}: [${show_values}]`;
   }
   return '未知选项';
+};
+
+const fetchInventories = async () => {
+  try {
+    const response = await getAllInventories();
+    inventories.value = (response.data as unknown as Inventory[]).filter(inv => !inv.deleted);
+    console.log('inventories:', inventories.value);
+  } catch (error) {
+    console.error('Error fetching inventories:', error);
+  }
+};
+
+const getInventoryName = (inventoryId: string): string => {
+  const inventory = inventories.value.find(inv => inv.id === inventoryId);
+  return inventory ? inventory.name || '未知原料' : '未知原料';
+};
+
+const addInventory = () => {
+  if (!newInventoryId.value || newInventoryQuantity.value <= 0) {
+    ElMessage.warning('请选择原料并输入正确的数量');
+    return;
+  }
+  
+  if (!editableProduct.value?.inventoryList) {
+    editableProduct.value!.inventoryList = [];
+  }
+  
+  const exists = editableProduct.value.inventoryList.some(
+    item => item.uuid === newInventoryId.value
+  );
+  
+  if (exists) {
+    ElMessage.warning('该原料已添加，请勿重复添加');
+    return;
+  }
+  
+  editableProduct.value.inventoryList.push({
+    uuid: newInventoryId.value,
+    amount: newInventoryQuantity.value
+  });
+  
+  newInventoryId.value = '';
+  newInventoryQuantity.value = 0;
+};
+
+const removeInventory = (index: number) => {
+  if (editableProduct.value?.inventoryList) {
+    editableProduct.value.inventoryList.splice(index, 1);
+  }
+};
+
+const updateInventoryQuantity = (index: number, newQuantity: number) => {
+  if (editableProduct.value?.inventoryList && editableProduct.value.inventoryList[index]) {
+    editableProduct.value.inventoryList[index].amount = newQuantity;
+  }
 };
 
 const confirmDelete = (product: Product) => {
@@ -425,6 +491,7 @@ const openCreateDialog = () => {
     status: 1,
     imgURL: '',
     productOptions: {},
+    inventoryList: [],
     onlyDining: false,
     onlyDelivery: false,
     no_coupon: false,
@@ -437,6 +504,8 @@ const openCreateDialog = () => {
   selectedOptionValues.value = {};
   imageFile.value = null;
   imagePreview.value = null;
+  newInventoryId.value = '';
+  newInventoryQuantity.value = 0;
   isCreating.value = true;
   isEditDialogVisible.value = true;
 };
@@ -569,6 +638,16 @@ const replenish = async () => {
           <div v-if="row.productOptions">
             <div v-for="(values, optionId) in row.productOptions" :key="optionId">
               {{ getProductOptionDisplay(String(optionId), values) }}
+            </div>
+          </div>
+        </template>
+      </el-table-column>
+
+      <el-table-column label="原始原料" width="160px">
+        <template #default="{ row }">
+          <div v-if="row.inventoryList">
+            <div v-for="item in row.inventoryList" :key="item.uuid">
+              {{ getInventoryName(item.uuid) }}: {{ item.amount }} {{ inventories.find(inv => inv.id === item.uuid)?.unit }}
             </div>
           </div>
         </template>
@@ -719,6 +798,76 @@ const replenish = async () => {
             <el-switch v-model="editableProduct.stocked" active-text="是" inactive-text="否"></el-switch>
           </el-form-item>
         </div>
+
+        <el-form-item label="原料配置" style="width: 100%;">
+          <div class="inventory-config-area" style="width: 100%;">
+            <div class="area-title">商品基础原料消耗</div>
+
+            <div v-if="editableProduct.inventoryList && editableProduct.inventoryList.length > 0">
+              <div
+                v-for="(item, index) in editableProduct.inventoryList"
+                :key="index"
+                class="inventory-item-row"
+                style="width: 100%; box-sizing: border-box;" 
+              >
+                <span class="inventory-name">
+                  {{ getInventoryName(item.uuid) }}
+                </span>
+                
+                <div class="inventory-actions">
+                  <el-input-number
+                    :model-value="item.amount"
+                    :min="0"
+                    :step="1"
+                    :precision="2"
+                    size="small"
+                    style="width: 120px;"
+                    @update:model-value="(val) => updateInventoryQuantity(index, val)"
+                  />
+                  <span class="unit-text">
+                    {{ inventories.find(inv => inv.id === item.uuid)?.unit }}
+                  </span>
+                  <el-button type="danger" link size="small" @click="removeInventory(index)">移除</el-button>
+                </div>
+              </div>
+            </div>
+            
+            <div v-else class="no-inventory-text">
+              暂未配置基础原料消耗
+            </div>
+
+            <div class="add-inventory-box" style="display: flex; width: 100%; gap: 10px;">
+              <el-select
+                v-model="newInventoryId"
+                placeholder="选择原料添加..."
+                size="small"
+                style="flex: 1;"
+                filterable
+              >
+                <el-option
+                  v-for="inventory in inventories"
+                  :key="inventory.id"
+                  :label="`${inventory.name} (${inventory.unit})`"
+                  :value="inventory.id"
+                />
+              </el-select>
+
+              <el-input-number
+                v-model.number="newInventoryQuantity"
+                :min="0"
+                :step="1"
+                :precision="2"
+                placeholder="数量"
+                size="small"
+                style="width: 120px;"
+              />
+              
+              <el-button type="primary" size="small" plain @click="addInventory">
+                 + 添加
+              </el-button>
+            </div>
+          </div>
+        </el-form-item>
 
         <el-form-item label="可选项" class="option-container">
           <div
