@@ -41,7 +41,7 @@ import * as XLSX from 'xlsx';
 
 // 初始化 hiprint
 hiprint.init({
-  host: 'http://localhost:17521',
+  host: import.meta.env.VITE_HIPRINT_HOST || 'http://localhost:17521',
 });
 
 // 订单数据
@@ -695,6 +695,10 @@ const connectWebSocket = () => {
 
   ws.onmessage = async (event: MessageEvent) => {
     const msg=event.data as string;
+    // Skip parsing for heartbeat pong response
+    if (msg === "pong") {
+      return;
+    }
     const dto=JSON.parse(msg)
     const state=dto.state as string
     if(state=="已支付"){
