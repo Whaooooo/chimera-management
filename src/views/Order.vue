@@ -3,13 +3,15 @@ import { ref, onMounted, computed, onBeforeUnmount } from 'vue';
 import {
   getAllOrders,
   getAllProductsShop,
+  getAllInventories,
   createOrderInStore,
   getAllProductOptions,
   supplyOrder,
   refundApply,
-  batchSupplyOrders
+  batchSupplyOrders,
+  getAllAppConfigurations
 } from '../client/services.gen';
-import type { Order, Product, OptionValue, ProductOption, OrderApiParams, UserDTO, DeliveryInfo } from '../client/types.gen';
+import type { Order, Product, Inventory, OptionValue, ProductOption, OrderApiParams, UserDTO, DeliveryInfo } from '../client/types.gen';
 import {
   ElMessage,
   ElTable,
@@ -40,7 +42,7 @@ import * as XLSX from 'xlsx';
 
 // 初始化 hiprint
 hiprint.init({
-  host: 'http://localhost:17521',
+  host: import.meta.env.VITE_HIPRINT_HOST || 'http://localhost:17521',
 });
 
 // 订单数据
@@ -49,13 +51,33 @@ const productOptions = ref<Map<string, ProductOption>>(new Map());
 
 // 分页相关的变量
 const currentPage = ref(1); // 当前页码
-const pageSize = ref(10); // 每页展示的订单数量
+const pageSize = ref(30); // 每页展示的订单数量，默认30，可从配置表读取
+
+// 从配置表读取每页订单数量
+const loadPageSizeConfig = async () => {
+  try {
+    const response = await getAllAppConfigurations();
+    const configs = response.data || [];
+    const pageSizeConfig = configs.find((c: any) => c.key === 'order.list.pageSize');
+    if (pageSizeConfig && pageSizeConfig.value) {
+      const parsedSize = parseInt(pageSizeConfig.value, 10);
+      if (!isNaN(parsedSize) && parsedSize > 0) {
+        pageSize.value = parsedSize;
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to load page size config, using default:', error);
+  }
+};
 
 // Details dialog visibility and data
 const orderDetailsDialogVisible = ref(false);
 const selectedOrder = ref<Order | null>(null);
 
 const selectedOrders = ref<Order[]>([]);
+
+// 展示原料用量
+const inventories = ref<Inventory[]>([]);
 
 const selectAllOrders = () => {
   selectedOrders.value = paginatedOrders.value.slice(); // Select all visible orders
@@ -91,6 +113,72 @@ const BatchSupplyOrders = async () => {
     console.error('批量供餐时出错:', error);
     ElMessage.error('批量供餐时出错' + error);
   }
+};
+
+const BatchCalcIngridientUsage = async () => {
+  console.log("已选订单：", selectedOrders);
+
+  const [invResponse, optResponse] = await Promise.all([
+    getAllInventories(),
+    getAllProductOptions()
+  ]);
+
+  inventories.value = invResponse.data as Inventory[];
+  const allOptionGroups = optResponse.data;
+
+  const optionValueMap = new Map<string, any>();
+  
+  if (allOptionGroups) {
+    allOptionGroups.forEach(group => {
+      if (group.values) {
+        group.values.forEach(val => {
+          if (val.uuid) {
+            optionValueMap.set(val.uuid, val);
+          }
+        });
+      }
+    });
+  }
+
+  //这里偷懒一下，用 remain 表示用量了
+  inventories.value.forEach(inv => {
+    inv.remain = 0;
+  });
+
+  const inventoryMap = new Map(inventories.value.map(inv => [inv.id, inv]));
+
+  selectedOrders.value.forEach(order => {
+    order.items?.forEach(item => {
+      const product = productOptionsList.value.find(p => p.id === item.productId);
+      if (product && product.inventoryList) {
+        product.inventoryList.forEach(inventory => {
+          const inventoryItem = inventoryMap.get(inventory.uuid);
+          if (inventoryItem) {
+            inventoryItem.remain += inventory.amount; 
+          }
+        });
+      }
+
+      if (item.optionValues) {
+        for (const [key, snapshotValue] of Object.entries(item.optionValues)) {
+          
+          const realValue = optionValueMap.get(snapshotValue.uuid);
+          const targetValue = realValue || snapshotValue;
+
+          if (targetValue && targetValue.inventoryList) {
+            targetValue.inventoryList.forEach((inventory: any) => {
+              const inventoryItem = inventoryMap.get(inventory.uuid);
+              if (inventoryItem) {
+                inventoryItem.remain += inventory.amount;
+              }
+            });
+          }
+        }
+      }
+    });
+  });
+
+  console.log("计算后的原料用量（remain代表消耗量）：", inventories.value);
 };
 
 
@@ -629,6 +717,10 @@ const connectWebSocket = () => {
 
   ws.onmessage = async (event: MessageEvent) => {
     const msg=event.data as string;
+    // Skip parsing for heartbeat pong response
+    if (msg === "pong") {
+      return;
+    }
     const dto=JSON.parse(msg)
     const state=dto.state as string
     if(state=="已支付"){
@@ -725,6 +817,7 @@ const showReconnectAlert = () => {
 
 onMounted(async () => {
   try {
+    await loadPageSizeConfig(); // 加载每页订单数量配置
     await fetchProducts();
     await fetchOrders();
     await fetchAllProductOptions();
@@ -1726,6 +1819,13 @@ const processXlsxImport = async () => {
     <el-checkbox v-model="autoPrintDineInEnabled">自动打印堂食</el-checkbox>
     <el-checkbox v-model="autoPrintTakeOutEnabled">自动打印外带</el-checkbox>
     <el-checkbox v-model="autoPrintFixDeliverEnabled">自动打印定时达</el-checkbox>
+    <h3 v-if="inventories.length !== 0">统计</h3>
+
+    <div v-if="inventories.length !== 0" class="form-row">
+      <div v-for="item in inventories" :key="item.id">
+        {{ item.name }}: {{ Number(item.remain).toFixed(2) }} {{ item.unit }}
+      </div>
+    </div>
 
     <h1>订单列表</h1>
 
@@ -1734,6 +1834,7 @@ const processXlsxImport = async () => {
       <el-button @click="deselectAllOrders" size="small" style="margin-left: 10px;">取消全选</el-button> -->
       <el-button @click="batchPrintOrders" size="small" type="success" :disabled="selectedOrders.length === 0">批量打印</el-button>
       <el-button @click="BatchSupplyOrders" size="small" type="primary" :disabled="selectedOrders.length === 0">批量供餐</el-button>
+      <el-button @click="BatchCalcIngridientUsage" size="small" type="danger" :disabled="selectedOrders.length === 0">批量计算原料使用</el-button>
       <el-button @click="openBatchImportDialog" size="small" type="warning" style="margin-left: 10px;">批量导入订单</el-button>
     </div>
     
@@ -2091,9 +2192,10 @@ const processXlsxImport = async () => {
     <!-- 分页组件 -->
     <el-pagination
       v-model:current-page="currentPage"
-      :page-size="pageSize"
+      v-model:page-size="pageSize"
+      :page-sizes="[10, 20, 30, 50, 100]"
       :total="filteredOrders.length"
-      layout="prev, pager, next, jumper, ->, total"
+      layout="total, sizes, prev, pager, next, jumper"
       style="margin-top: 20px; text-align: right;"
     />
 
