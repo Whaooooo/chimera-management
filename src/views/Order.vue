@@ -8,7 +8,8 @@ import {
   getAllProductOptions,
   supplyOrder,
   refundApply,
-  batchSupplyOrders
+  batchSupplyOrders,
+  getAllAppConfigurations
 } from '../client/services.gen';
 import type { Order, Product, Inventory, OptionValue, ProductOption, OrderApiParams, UserDTO, DeliveryInfo } from '../client/types.gen';
 import {
@@ -50,7 +51,24 @@ const productOptions = ref<Map<string, ProductOption>>(new Map());
 
 // 分页相关的变量
 const currentPage = ref(1); // 当前页码
-const pageSize = ref(15); // 每页展示的订单数量
+const pageSize = ref(30); // 每页展示的订单数量，默认30，可从配置表读取
+
+// 从配置表读取每页订单数量
+const loadPageSizeConfig = async () => {
+  try {
+    const response = await getAllAppConfigurations();
+    const configs = response.data || [];
+    const pageSizeConfig = configs.find((c: any) => c.key === 'order.list.pageSize');
+    if (pageSizeConfig && pageSizeConfig.value) {
+      const parsedSize = parseInt(pageSizeConfig.value, 10);
+      if (!isNaN(parsedSize) && parsedSize > 0) {
+        pageSize.value = parsedSize;
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to load page size config, using default:', error);
+  }
+};
 
 // Details dialog visibility and data
 const orderDetailsDialogVisible = ref(false);
@@ -786,6 +804,7 @@ const showReconnectAlert = () => {
 
 onMounted(async () => {
   try {
+    await loadPageSizeConfig(); // 加载每页订单数量配置
     await fetchProducts();
     await fetchOrders();
     await fetchAllProductOptions();
@@ -2157,9 +2176,10 @@ const processXlsxImport = async () => {
     <!-- 分页组件 -->
     <el-pagination
       v-model:current-page="currentPage"
-      :page-size="pageSize"
+      v-model:page-size="pageSize"
+      :page-sizes="[10, 20, 30, 50, 100]"
       :total="filteredOrders.length"
-      layout="prev, pager, next, jumper, ->, total"
+      layout="total, sizes, prev, pager, next, jumper"
       style="margin-top: 20px; text-align: right;"
     />
 
