@@ -105,7 +105,7 @@ const BatchCalcIngridientUsage = async () => {
     getAllProductOptions()
   ]);
 
-  inventories.value = invResponse.data;
+  inventories.value = invResponse.data as Inventory[];
   const allOptionGroups = optResponse.data;
 
   const optionValueMap = new Map<string, any>();
@@ -1787,7 +1787,7 @@ const processXlsxImport = async () => {
     <h3 v-if="inventories.length !== 0">统计</h3>
 
     <div v-if="inventories.length !== 0" class="form-row">
-      <div v-for="item in inventories" :key="item.uuid">
+      <div v-for="item in inventories" :key="item.id">
         {{ item.name }}: {{ Number(item.remain).toFixed(2) }} {{ item.unit }}
       </div>
     </div>

@@ -199,7 +199,7 @@ const isCreating = ref(false);
 const optionForm = ref(null);
 
 // 额外原料选项
-const inventories = ref<Inventory | null>(null);
+const inventories = ref<Inventory[]>([]);
 const inventoryInputs = ref<{ inventoryId: string; quantity: number }[]>([]);
 
 // 获取商品选项
@@ -238,7 +238,7 @@ const deleteOption = async (option: ProductOption) => {
 const fetchInventories = async () => {
   try {
     const response = await getAllInventories();
-    inventories.value = (response.data as unknown as Inventory[]).filter(inv => !inv.deleted);
+    inventories.value = (response.data as Inventory[]).filter(inv => !inv.deleted);
     console.log('inventories:', inventories.value);
   } catch (error) {
     console.error('获取原料出错:', error);

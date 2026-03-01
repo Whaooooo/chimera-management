@@ -1607,9 +1607,7 @@ export type GetOperationRecordsError = ({
     };
 });
 
-export type GetAllInventoriesResponse = ({
-    [key: string]: unknown;
-});
+export type GetAllInventoriesResponse = (Array<Inventory>);
 
 export type GetAllInventoriesError = ({
     [key: string]: {
