@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, onBeforeUnmount } from 'vue';
+import { ref, onMounted, computed, onBeforeUnmount, watch } from 'vue';
 import {
   getAllOrders,
   getAllProductsShop,
@@ -696,6 +696,43 @@ const printOrder = (order: Order) => {
 
 };
 
+// 自动打印开关状态 - 使用 localStorage 持久化
+const LOCAL_STORAGE_KEYS = {
+  autoPrintDineIn: 'order.autoprint.dinein',
+  autoPrintTakeOut: 'order.autoprint.takeout',
+  autoPrintFixDeliver: 'order.autoprint.fixdelivery',
+};
+
+// 从 localStorage 读取配置，如果没有则使用默认值
+const loadAutoPrintConfig = () => {
+  const getBoolOrDefault = (key: string, defaultValue: boolean): boolean => {
+    const stored = localStorage.getItem(key);
+    if (stored === null) return defaultValue;
+    return stored === 'true';
+  };
+
+  return {
+    dineIn: getBoolOrDefault(LOCAL_STORAGE_KEYS.autoPrintDineIn, true),
+    takeOut: getBoolOrDefault(LOCAL_STORAGE_KEYS.autoPrintTakeOut, true),
+    fixDeliver: getBoolOrDefault(LOCAL_STORAGE_KEYS.autoPrintFixDeliver, false),
+  };
+};
+
+const autoPrintConfig = loadAutoPrintConfig();
+const autoPrintDineInEnabled = ref(autoPrintConfig.dineIn);
+const autoPrintTakeOutEnabled = ref(autoPrintConfig.takeOut);
+const autoPrintFixDeliverEnabled = ref(autoPrintConfig.fixDeliver);
+
+// 监听变化并保存到 localStorage
+watch(autoPrintDineInEnabled, (newValue) => {
+  localStorage.setItem(LOCAL_STORAGE_KEYS.autoPrintDineIn, String(newValue));
+});
+watch(autoPrintTakeOutEnabled, (newValue) => {
+  localStorage.setItem(LOCAL_STORAGE_KEYS.autoPrintTakeOut, String(newValue));
+});
+watch(autoPrintFixDeliverEnabled, (newValue) => {
+  localStorage.setItem(LOCAL_STORAGE_KEYS.autoPrintFixDeliver, String(newValue));
+});
 
 const connectWebSocket = () => {
   const auth=localStorage.getItem(LOCAL_AUTH_NAME)
@@ -734,6 +771,15 @@ const connectWebSocket = () => {
         confirmButtonText: '确定',
         type: 'success',
       });
+      if (autoPrintDineInEnabled.value && order.scene == "堂食") {
+        printOrder(order);
+      }
+      if (autoPrintTakeOutEnabled.value && order.scene == "外带") {
+        printOrder(order);
+      }
+      if (autoPrintFixDeliverEnabled.value && order.scene == "定时达") {
+        printOrder(order);
+      }
     }else if(state=="已退款"){
       await fetchOrders(); // 刷新订单列表
       ElMessageBox.alert(
@@ -1803,6 +1849,9 @@ const processXlsxImport = async () => {
       </div>
     </el-form>
 
+    <el-checkbox v-model="autoPrintDineInEnabled">自动打印堂食</el-checkbox>
+    <el-checkbox v-model="autoPrintTakeOutEnabled">自动打印外带</el-checkbox>
+    <el-checkbox v-model="autoPrintFixDeliverEnabled">自动打印定时达</el-checkbox>
     <h3 v-if="inventories.length !== 0">统计</h3>
 
     <div v-if="inventories.length !== 0" class="form-row">
