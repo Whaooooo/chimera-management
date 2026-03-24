@@ -771,14 +771,17 @@ const connectWebSocket = () => {
         confirmButtonText: '确定',
         type: 'success',
       });
-      if (autoPrintDineInEnabled.value && order.scene == "堂食") {
-        printOrder(order);
-      }
-      if (autoPrintTakeOutEnabled.value && order.scene == "外带") {
-        printOrder(order);
-      }
-      if (autoPrintFixDeliverEnabled.value && order.scene == "定时达") {
-        printOrder(order);
+      // Guard against missing order before auto-print checks
+      if (order) {
+        if (autoPrintDineInEnabled.value && order.scene == "堂食") {
+          printOrder(order);
+        }
+        if (autoPrintTakeOutEnabled.value && order.scene == "外带") {
+          printOrder(order);
+        }
+        if (autoPrintFixDeliverEnabled.value && order.scene == "定时达") {
+          printOrder(order);
+        }
       }
     }else if(state=="已退款"){
       await fetchOrders(); // 刷新订单列表
