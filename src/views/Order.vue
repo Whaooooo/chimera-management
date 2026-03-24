@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, onBeforeUnmount } from 'vue';
+import { ref, onMounted, computed, onBeforeUnmount, watch } from 'vue';
 import {
   getAllOrders,
   getAllProductsShop,
@@ -696,10 +696,43 @@ const printOrder = (order: Order) => {
 
 };
 
-// 自动打印开关状态
-const autoPrintDineInEnabled = ref(true);
-const autoPrintTakeOutEnabled = ref(true);
-const autoPrintFixDeliverEnabled = ref(false);
+// 自动打印开关状态 - 使用 localStorage 持久化
+const LOCAL_STORAGE_KEYS = {
+  autoPrintDineIn: 'order.autoprint.dinein',
+  autoPrintTakeOut: 'order.autoprint.takeout',
+  autoPrintFixDeliver: 'order.autoprint.fixdelivery',
+};
+
+// 从 localStorage 读取配置，如果没有则使用默认值
+const loadAutoPrintConfig = () => {
+  const getBoolOrDefault = (key: string, defaultValue: boolean): boolean => {
+    const stored = localStorage.getItem(key);
+    if (stored === null) return defaultValue;
+    return stored === 'true';
+  };
+
+  return {
+    dineIn: getBoolOrDefault(LOCAL_STORAGE_KEYS.autoPrintDineIn, true),
+    takeOut: getBoolOrDefault(LOCAL_STORAGE_KEYS.autoPrintTakeOut, true),
+    fixDeliver: getBoolOrDefault(LOCAL_STORAGE_KEYS.autoPrintFixDeliver, false),
+  };
+};
+
+const autoPrintConfig = loadAutoPrintConfig();
+const autoPrintDineInEnabled = ref(autoPrintConfig.dineIn);
+const autoPrintTakeOutEnabled = ref(autoPrintConfig.takeOut);
+const autoPrintFixDeliverEnabled = ref(autoPrintConfig.fixDeliver);
+
+// 监听变化并保存到 localStorage
+watch(autoPrintDineInEnabled, (newValue) => {
+  localStorage.setItem(LOCAL_STORAGE_KEYS.autoPrintDineIn, String(newValue));
+});
+watch(autoPrintTakeOutEnabled, (newValue) => {
+  localStorage.setItem(LOCAL_STORAGE_KEYS.autoPrintTakeOut, String(newValue));
+});
+watch(autoPrintFixDeliverEnabled, (newValue) => {
+  localStorage.setItem(LOCAL_STORAGE_KEYS.autoPrintFixDeliver, String(newValue));
+});
 
 const connectWebSocket = () => {
   const auth=localStorage.getItem(LOCAL_AUTH_NAME)
