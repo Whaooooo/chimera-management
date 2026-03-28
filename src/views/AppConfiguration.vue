@@ -216,14 +216,21 @@
     if (businessHoursSegments.value.length === 0) {
       addBusinessHoursSegment();
     }
-    validateBusinessHours();
+    // Only validate if this is a business hours config
+    if (isBusinessHoursKey(currentConfig.value.key)) {
+      validateBusinessHours();
+    }
   };
   
   // 监听时间段变化
   watch(businessHoursSegments, () => {
-    validateBusinessHours();
+    // Only validate if this is a business hours config
     if (isBusinessHoursKey(currentConfig.value.key)) {
+      validateBusinessHours();
       currentConfig.value.value = formatBusinessHours(businessHoursSegments.value);
+    } else {
+      // Clear any previous error for non-business-hours configs
+      businessHoursError.value = '';
     }
   }, { deep: true });
   
